@@ -25,12 +25,12 @@ struct device;
 /*
  * LED Core
  */
-
+//bug 458305, zhangrui@wingtech.com, 20190716, modify the blink brightness of led
 enum led_brightness {
 	LED_OFF		= 0,
 	LED_ON		= 1,
-	LED_HALF	= 127,
-	LED_FULL	= 255,
+    LED_HALF    = 30,
+    LED_FULL    = 60,
 };
 
 struct led_classdev {

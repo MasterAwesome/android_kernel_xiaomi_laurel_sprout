@@ -38,7 +38,6 @@
 
 #define USB_VENDOR_GENESYS_LOGIC		0x05e3
 #define USB_VENDOR_SMSC				0x0424
-#define USB_PRODUCT_USB5534B			0x5534
 #define HUB_QUIRK_CHECK_PORT_AUTOSUSPEND	0x01
 #define HUB_QUIRK_DISABLE_AUTOSUSPEND		0x02
 
@@ -4379,6 +4378,8 @@ static int hub_set_address(struct usb_device *udev, int devnum)
  * device says it supports the new USB 2.0 Link PM errata by setting the BESL
  * support bit in the BOS descriptor.
  */
+/*ExtB HONEMI-61899 modify the copy speed from phone to sdcard with the OTG line. 2019-5-23 begin  */
+#if 0
 static void hub_set_initial_usb2_lpm_policy(struct usb_device *udev)
 {
 	struct usb_hub *hub = usb_hub_to_struct_hub(udev->parent);
@@ -4396,7 +4397,8 @@ static void hub_set_initial_usb2_lpm_policy(struct usb_device *udev)
 		usb_enable_usb2_hardware_lpm(udev);
 	}
 }
-
+#endif
+/*ExtB HONEMI-61899 modify the copy speed from phone to sdcard with the OTG line. 2019-5-23 end  */
 static int hub_enable_device(struct usb_device *udev)
 {
 	struct usb_hcd *hcd = bus_to_hcd(udev->bus);
@@ -4748,7 +4750,10 @@ hub_port_init(struct usb_hub *hub, struct usb_device *udev, int port1,
 	/* notify HCD that we have a device connected and addressed */
 	if (hcd->driver->update_device)
 		hcd->driver->update_device(hcd, udev);
-	hub_set_initial_usb2_lpm_policy(udev);
+/*ExtB HONEMI-61899 modify the copy speed from phone to sdcard with the OTG line. 2019-5-23 begin  */
+	//hub_set_initial_usb2_lpm_policy(udev);
+/*ExtB HONEMI-61899 modify the copy speed from phone to sdcard with the OTG line. 2019-5-23 end  */
+
 fail:
 	if (retval) {
 		hub_port_disable(hub, port1, 0);
@@ -5350,11 +5355,8 @@ out_hdev_lock:
 }
 
 static const struct usb_device_id hub_id_table[] = {
-    { .match_flags = USB_DEVICE_ID_MATCH_VENDOR
-                   | USB_DEVICE_ID_MATCH_PRODUCT
-                   | USB_DEVICE_ID_MATCH_INT_CLASS,
+    { .match_flags = USB_DEVICE_ID_MATCH_VENDOR | USB_DEVICE_ID_MATCH_INT_CLASS,
       .idVendor = USB_VENDOR_SMSC,
-      .idProduct = USB_PRODUCT_USB5534B,
       .bInterfaceClass = USB_CLASS_HUB,
       .driver_info = HUB_QUIRK_DISABLE_AUTOSUSPEND},
     { .match_flags = USB_DEVICE_ID_MATCH_VENDOR

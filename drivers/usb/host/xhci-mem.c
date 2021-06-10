@@ -2257,7 +2257,9 @@ static void xhci_add_in_port(struct xhci_hcd *xhci, unsigned int num_ports,
 		xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 				"xHCI 1.0: support USB2 software lpm");
 		xhci->sw_lpm_support = 1;
-		if (temp & XHCI_HLC) {
+/*ExtB HONEMI-61899 modify the copy speed from phone to sdcard with the OTG line. 2019-5-23 begin  */
+		if (0 && (temp & XHCI_HLC)) {
+/*ExtB HONEMI-61899 modify the copy speed from phone to sdcard with the OTG line. 2019-5-23 end  */
 			xhci_dbg_trace(xhci, trace_xhci_dbg_init,
 					"xHCI 1.0: support USB2 hardware lpm");
 			xhci->hw_lpm_support = 1;

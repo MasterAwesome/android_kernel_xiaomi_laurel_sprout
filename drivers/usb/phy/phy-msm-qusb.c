@@ -1058,6 +1058,8 @@ static int qusb_phy_probe(struct platform_device *pdev)
 						"qcom,tune2-efuse-num-bits",
 						&qphy->tune2_efuse_num_of_bits);
 			}
+			/*bug434061 modify eyediag parameter, 2019-5-16 begin*/
+			#if 0
 			of_property_read_u32(dev->of_node,
 						"qcom,tune2-efuse-correction",
 						&qphy->tune2_efuse_correction);
@@ -1066,6 +1068,10 @@ static int qusb_phy_probe(struct platform_device *pdev)
 				dev_err(dev, "DT Value for tune2 efuse is invalid.\n");
 				return -EINVAL;
 			}
+			#else
+			qphy->tune2_efuse_correction = -6;
+			#endif
+			/*bug434061 modify eyediag parameter, 2019-5-16 end*/
 		}
 	}
 

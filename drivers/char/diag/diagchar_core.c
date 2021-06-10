@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2020, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -779,7 +779,10 @@ int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
 		     int pid)
 {
 	struct diag_cmd_reg_t *new_item = NULL;
-
+	//+bug437009 huzhiqiang.wt add 20190408 for Repairing BT secondary coupling fail
+	struct diag_cmd_reg_t *temp_item = NULL;
+	struct diag_cmd_reg_entry_t *temp_entry = NULL;
+	//-bug437009 huzhiqiang.wt add 20190408 for Repairing BT secondary coupling fail
 	if (!new_entry) {
 		pr_err("diag: In %s, invalid new entry\n", __func__);
 		return -EINVAL;
@@ -805,6 +808,20 @@ int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
 	INIT_LIST_HEAD(&new_item->link);
 
 	mutex_lock(&driver->cmd_reg_mutex);
+	//+bug437009 huzhiqiang.wt add 20190408 for Repairing BT secondary coupling fail
+	if(proc > 0) {
+		temp_entry = diag_cmd_search(new_entry, proc);
+		if (temp_entry) {
+			temp_item = container_of(temp_entry, struct diag_cmd_reg_t, entry);
+			if (temp_item) {
+				temp_item->pid = pid;
+				mutex_unlock(&driver->cmd_reg_mutex);
+				kfree(new_item);
+				return 0;
+			}
+		}
+	}
+	//-bug437009 huzhiqiang.wt add 20190408 for Repairing BT secondary coupling fail
 	list_add_tail(&new_item->link, &driver->cmd_reg_list);
 	driver->cmd_reg_count++;
 	diag_cmd_invalidate_polling(DIAG_CMD_ADD);
@@ -1996,15 +2013,13 @@ static int diag_switch_logging(struct diag_logging_mode_param_t *param)
 				driver->pcie_switch_pid = current->tgid;
 			}
 			if (new_mode == DIAG_PCIE_MODE) {
-				driver->transport_set =
-					DIAG_ROUTE_TO_PCIE;
+				driver->transport_set = DIAG_ROUTE_TO_PCIE;
 				diagmem_setsize(POOL_TYPE_MUX_APPS,
 					itemsize_pcie_apps,
 					(poolsize_pcie_apps + 1 +
 						(NUM_PERIPHERALS * 6)));
 			} else if (new_mode == DIAG_USB_MODE) {
-				driver->transport_set =
-					DIAG_ROUTE_TO_USB;
+				driver->transport_set = DIAG_ROUTE_TO_USB;
 				diagmem_setsize(POOL_TYPE_MUX_APPS,
 					itemsize_usb_apps,
 					(poolsize_usb_apps + 1 +
@@ -4402,7 +4417,7 @@ static void diag_init_transport(void)
 	 * The number of buffers encompasses Diag data generated on
 	 * the Apss processor + 1 for the responses generated
 	 * exclusively on the Apps processor + data from data channels
-	 *(4 channels per peripheral) + data from command channels (2)
+	 *(4 channels periperipheral) + data from command channels (2)
 	 */
 	diagmem_setsize(POOL_TYPE_MUX_APPS, itemsize_pcie_apps,
 		poolsize_pcie_apps + 1 + (NUM_PERIPHERALS * 6));
@@ -4421,7 +4436,7 @@ static void diag_init_transport(void)
 	 * The number of buffers encompasses Diag data generated on
 	 * the Apss processor + 1 for the responses generated
 	 * exclusively on the Apps processor + data from data channels
-	 *(4 channels per peripheral) + data from command channels (2)
+	 *(4 channels periperipheral) + data from command channels (2)
 	 */
 	diagmem_setsize(POOL_TYPE_MUX_APPS, itemsize_usb_apps,
 		poolsize_usb_apps + 1 + (NUM_PERIPHERALS * 6));

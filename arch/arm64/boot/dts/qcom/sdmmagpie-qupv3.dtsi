@@ -445,8 +445,8 @@
 						<&qupv3_se11_tx>;
 		pinctrl-1 = <&qupv3_se11_ctsrx>, <&qupv3_se11_rts>,
 						<&qupv3_se11_tx>;
-		interrupts-extended = <&pdc GIC_SPI 358 0>,
-				<&tlmm 92 0>;
+		/*interrupts-extended = <&pdc GIC_SPI 358 0>,
+				<&tlmm 92 0>;*/
 		status = "disabled";
 		qcom,wakeup-byte = <0xFD>;
 		qcom,wrapper-core = <&qupv3_1>;

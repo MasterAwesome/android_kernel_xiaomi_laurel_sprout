@@ -39,6 +39,10 @@
 #define SLEEP_EXIT_VOTER		"SLEEP_EXIT_VOTER"
 
 #define V_RAW_TO_UV(V_RAW)		div_u64(194637ULL * (u64)V_RAW, 1000)
+//+Extb 60233,xujianbang.wt,Modify,20190503,Limit SOC update when charging stop
+#define I_RAW_TO_UA(I_RAW)		div_s64(152588LL * (s64)I_RAW, 1000)
+//-Extb 60233,xujianbang.wt,Modify,20190503,Limit SOC update when charging stop
+
 #define FIFO_V_RESET_VAL		0x8000
 #define FIFO_I_RESET_VAL		0x8000
 

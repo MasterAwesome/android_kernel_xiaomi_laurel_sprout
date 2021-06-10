@@ -3,7 +3,7 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.c
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
  *
  * Authors:
  *	Santosh Yaraganavi <santosh.sy@samsung.com>
@@ -212,6 +212,9 @@ static void ufshcd_update_uic_error_cnt(struct ufs_hba *hba, u32 reg, int type)
 				 UFSHCD_ERROR_MASK)
 /* UIC command timeout, unit: ms */
 #define UIC_CMD_TIMEOUT	500
+
+/*HONGMI-65267 UIC PWR CTRL command timeout, unit: ms,modify by guodandan,2019-6-8*/
+#define UIC_PWR_CTRL_CMD_TIMEOUT	3000
 
 /* NOP OUT retries waiting for NOP IN response */
 #define NOP_OUT_RETRIES    10
@@ -3803,7 +3806,6 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 
 	err = ufshcd_prepare_lrbp_crypto(hba, cmd, lrbp);
 	if (err) {
-		ufshcd_release(hba, false);
 		lrbp->cmd = NULL;
 		clear_bit_unlock(tag, &hba->lrb_in_use);
 		goto out;
@@ -3826,7 +3828,6 @@ static int ufshcd_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 
 	err = ufshcd_map_sg(hba, lrbp);
 	if (err) {
-		ufshcd_release(hba, false);
 		lrbp->cmd = NULL;
 		clear_bit_unlock(tag, &hba->lrb_in_use);
 		ufshcd_release_all(hba);
@@ -4502,13 +4503,14 @@ int ufshcd_map_desc_id_to_length(struct ufs_hba *hba,
 	case QUERY_DESC_IDN_STRING:
 		*desc_len = QUERY_DESC_MAX_SIZE;
 		break;
-	case QUERY_DESC_IDN_HEALTH:
-		*desc_len = hba->desc_size.hlth_desc;
-		break;
 	case QUERY_DESC_IDN_RFU_0:
 	case QUERY_DESC_IDN_RFU_1:
 		*desc_len = 0;
 		break;
+    case QUERY_DESC_IDN_HEALTH:
+            *desc_len = hba->desc_size.dev_heal_desc;
+            break;
+
 	default:
 		*desc_len = 0;
 		return -EINVAL;
@@ -4613,10 +4615,29 @@ static inline int ufshcd_read_power_desc(struct ufs_hba *hba,
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_POWER, 0, buf, size);
 }
 
+int ufshcd_read_health_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+{
+	return ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0, buf, size);
+}
+
+
 int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size)
 {
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_DEVICE, 0, buf, size);
 }
+
+int ufshcd_get_hynix_hr(struct scsi_device *sdev, u8 *buf, u32 size)
+{
+	struct ufs_hba *hba;
+	int ret = 0;
+	hba = shost_priv(sdev->host);
+	size = QUERY_DESC_HEALTH_MAX_SIZE;
+	pm_runtime_get_sync(hba->dev);
+	ret = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0, buf, size);
+	pm_runtime_put_sync(hba->dev);
+	return ret;
+}
+
 
 /**
  * ufshcd_read_string_desc - read string descriptor
@@ -5114,8 +5135,9 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 	}
 
 more_wait:
+	/*HONGMI-65267 UIC PWR CTRL command timeout, unit: ms,modify by guodandan,2019-6-8*/
 	if (!wait_for_completion_timeout(hba->uic_async_done,
-					 msecs_to_jiffies(UIC_CMD_TIMEOUT))) {
+					 msecs_to_jiffies(UIC_PWR_CTRL_CMD_TIMEOUT))) {
 		u32 intr_status = 0;
 		s64 ts_since_last_intr;
 
@@ -6767,6 +6789,7 @@ static int ufshcd_bkops_ctrl(struct ufs_hba *hba,
 		err = ufshcd_enable_auto_bkops(hba);
 	else
 		err = ufshcd_disable_auto_bkops(hba);
+	hba->urgent_bkops_lvl = curr_status;
 out:
 	return err;
 }
@@ -8568,6 +8591,11 @@ static void ufshcd_init_desc_sizes(struct ufs_hba *hba)
 		hba->desc_size.geom_desc = QUERY_DESC_GEOMETRY_DEF_SIZE;
 
 	err = ufshcd_read_desc_length(hba, QUERY_DESC_IDN_HEALTH, 0,
+		&hba->desc_size.dev_heal_desc);
+	if (err)
+		hba->desc_size.dev_heal_desc = QUERY_DESC_HEALTH_MAX_SIZE;
+
+	err = ufshcd_read_desc_length(hba, QUERY_DESC_IDN_HEALTH, 0,
 		&hba->desc_size.hlth_desc);
 	if (err)
 		hba->desc_size.hlth_desc = QUERY_DESC_HEALTH_DEF_SIZE;
@@ -8581,6 +8609,7 @@ static void ufshcd_def_desc_sizes(struct ufs_hba *hba)
 	hba->desc_size.conf_desc = QUERY_DESC_CONFIGURATION_DEF_SIZE;
 	hba->desc_size.unit_desc = QUERY_DESC_UNIT_DEF_SIZE;
 	hba->desc_size.geom_desc = QUERY_DESC_GEOMETRY_DEF_SIZE;
+	hba->desc_size.dev_heal_desc = QUERY_DESC_HEALTH_MAX_SIZE;
 	hba->desc_size.hlth_desc = QUERY_DESC_HEALTH_DEF_SIZE;
 }
 
@@ -8726,6 +8755,45 @@ out:
 	return err;
 }
 
+static char serial[QUERY_DESC_MAX_SIZE] = {0};
+
+char *ufs_get_serial(void)
+{
+	return serial;
+}
+
+static int ufs_init_serial(struct ufs_hba *hba)
+{
+	int err, i;
+	u8 model_index;
+	u8 str_desc_buf[QUERY_DESC_MAX_SIZE + 1];
+	u8 desc_buf[QUERY_DESC_DEVICE_DEF_SIZE];
+
+	err = ufshcd_read_device_desc(hba, desc_buf,
+			QUERY_DESC_DEVICE_DEF_SIZE);
+	if (err) {
+		pr_err("read device_desc failed\n");
+		goto out;
+	}
+
+	/*SerialNumber*/
+	model_index = desc_buf[DEVICE_DESC_PARAM_SN];
+	memset(str_desc_buf, 0, QUERY_DESC_MAX_SIZE);
+	err = ufshcd_read_string_desc(hba, model_index, str_desc_buf,
+			QUERY_DESC_MAX_SIZE, FALSE);
+	if (err)
+		goto out;
+
+	for (i = 2; i <  str_desc_buf[QUERY_DESC_LENGTH_OFFSET]; i += 2) {
+		/* bug-441100, jiangrenbin.wt, 20190505, MODIFY, Solve array Cross-border access. */
+		snprintf(serial+i*2 - 4, QUERY_DESC_MAX_SIZE-i*2 + 4, "%02x%02x", str_desc_buf[i], str_desc_buf[i+1]);
+	}
+	pr_info("SerialNumber:%s\n", serial);
+
+out:
+	return err;
+}
+
 /**
  * ufshcd_probe_hba - probe hba to detect device and initialize
  * @hba: per-adapter instance
@@ -8808,6 +8876,7 @@ reinit:
 
 	ufs_fixup_device_setup(hba, &card);
 	ufshcd_tune_unipro_params(hba);
+        ufs_init_serial(hba);
 
 	ufshcd_apply_pm_quirks(hba);
 	if (card.wspecversion < 0x300) {
@@ -10174,7 +10243,7 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 	/* UFS device & link must be active before we enter in this function */
 	if (!ufshcd_is_ufs_dev_active(hba) || !ufshcd_is_link_active(hba))
-		goto disable_clks;
+		goto set_vreg_lpm;
 
 	if (ufshcd_is_runtime_pm(pm_op)) {
 		if (ufshcd_can_autobkops_during_suspend(hba)) {
@@ -10210,6 +10279,9 @@ static int ufshcd_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	    ufshcd_is_hibern8_on_idle_allowed(hba))
 		hba->hibern8_on_idle.state = HIBERN8_ENTERED;
 
+set_vreg_lpm:
+	if (!hba->auto_bkops_enabled)
+		ufshcd_vreg_set_lpm(hba);
 disable_clks:
 	/*
 	 * Call vendor specific suspend callback. As these callbacks may access
@@ -10219,13 +10291,6 @@ disable_clks:
 	ret = ufshcd_vops_suspend(hba, pm_op);
 	if (ret)
 		goto set_link_active;
-
-	/* reset the connected UFS device during power down */
-	if (ufshcd_is_link_off(hba)) {
-		ret = ufshcd_assert_device_reset(hba);
-		if (ret)
-			goto set_link_active;
-	}
 
 	if (!ufshcd_is_link_active(hba))
 		ret = ufshcd_disable_clocks(hba, false);
@@ -10248,12 +10313,6 @@ disable_clks:
 	 * host controller transaction expected till resume.
 	 */
 	ufshcd_disable_irq(hba);
-
-	if (!hba->auto_bkops_enabled ||
-		!(req_dev_pwr_mode == UFS_ACTIVE_PWR_MODE &&
-		req_link_state == UIC_LINK_ACTIVE_STATE))
-		ufshcd_vreg_set_lpm(hba);
-
 	/* Put the host controller in low power mode if possible */
 	ufshcd_hba_vreg_set_lpm(hba);
 	goto out;
@@ -10266,7 +10325,6 @@ set_link_active:
 		ufshcd_set_link_active(hba);
 	} else if (ufshcd_is_link_off(hba)) {
 		ufshcd_update_error_stats(hba, UFS_ERR_VOPS_SUSPEND);
-		ufshcd_deassert_device_reset(hba);
 		ufshcd_host_reset_and_restore(hba);
 	}
 set_dev_active:
@@ -10309,19 +10367,17 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	old_pwr_mode = hba->curr_dev_pwr_mode;
 
 	ufshcd_hba_vreg_set_hpm(hba);
-
-	ret = ufshcd_vreg_set_hpm(hba);
-	if (ret)
-		goto out;
-
 	/* Make sure clocks are enabled before accessing controller */
 	ret = ufshcd_enable_clocks(hba);
 	if (ret)
-		goto disable_vreg;
+		goto out;
 
 	/* enable the host irq as host controller would be active soon */
 	ufshcd_enable_irq(hba);
 
+	ret = ufshcd_vreg_set_hpm(hba);
+	if (ret)
+		goto disable_irq_and_vops_clks;
 	if (hba->restore) {
 		/* Configure UTRL and UTMRL base address registers */
 		ufshcd_writel(hba, lower_32_bits(hba->utrdl_dma_addr),
@@ -10342,7 +10398,7 @@ static int ufshcd_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	 */
 	ret = ufshcd_vops_resume(hba, pm_op);
 	if (ret)
-		goto disable_irq_and_vops_clks;
+		goto disable_vreg;
 
 	if (hba->extcon &&
 	    (ufshcd_is_card_offline(hba) ||
@@ -10419,6 +10475,8 @@ set_old_link_state:
 		hba->hibern8_on_idle.state = HIBERN8_ENTERED;
 vendor_suspend:
 	ufshcd_vops_suspend(hba, pm_op);
+disable_vreg:
+	ufshcd_vreg_set_lpm(hba);
 disable_irq_and_vops_clks:
 	ufshcd_disable_irq(hba);
 	if (hba->clk_scaling.is_allowed)
@@ -10426,8 +10484,6 @@ disable_irq_and_vops_clks:
 	ufshcd_disable_clocks(hba, false);
 	if (ufshcd_is_clkgating_allowed(hba))
 		hba->clk_gating.state = CLKS_OFF;
-disable_vreg:
-	ufshcd_vreg_set_lpm(hba);
 out:
 	hba->pm_op_in_progress = 0;
 

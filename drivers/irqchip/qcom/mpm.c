@@ -124,11 +124,10 @@ static inline void msm_mpm_write(unsigned int reg,
 	unsigned int offset = MPM_REGISTER(reg, subreg_index);
 	u32 r_value;
 
-	writel_relaxed(value, mpm_reg_base + offset);
-
 	do {
-		r_value = readl_relaxed(mpm_reg_base + offset);
+		writel_relaxed(value, mpm_reg_base + offset);
 		udelay(5);
+		r_value = readl_relaxed(mpm_reg_base + offset);
 	} while (r_value != value);
 }
 

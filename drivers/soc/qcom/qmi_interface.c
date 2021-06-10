@@ -505,6 +505,9 @@ static void qmi_handle_message(struct qmi_handle *qmi,
 			mutex_unlock(&qmi->txn_lock);
 			return;
 		}
+		//+Extb HONGMI-65284 modem crash for P to Q 2019-11-9
+        mutex_lock(&txn->lock);
+		//-Extb HONGMI-65284 modem crash for P to Q 2019-11-9
 		if (txn->dest && txn->ei) {
 			ret = qmi_decode_message(buf, len, txn->ei, txn->dest);
 			if (ret < 0)
@@ -515,6 +518,9 @@ static void qmi_handle_message(struct qmi_handle *qmi,
 		} else {
 			qmi_invoke_handler(qmi, sq, txn, buf, len);
 		}
+		//+Extb HONGMI-65284 modem crash for P to Q 2019-11-9
+		mutex_unlock(&txn->lock);
+		//-Extb HONGMI-65284 modem crash for P to Q 2019-11-9
 		mutex_unlock(&qmi->txn_lock);
 	} else {
 		/* Create a txn based on the txn_id of the incoming message */

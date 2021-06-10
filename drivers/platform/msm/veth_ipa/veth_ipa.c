@@ -366,10 +366,10 @@ int veth_set_ul_dl_smmu_ipa_params(struct veth_ipa_dev *pdata,
 		return -ENOMEM;
 	}
 
-	ret = dma_get_sgtable(&pdata->pdev->dev,
+	ret = dma_get_sgtable(ipa_get_dma_dev(),
 		ul->buff_pool_base_sgt,
 		veth_emac_mem->rx_buff_pool_base_va,
-		veth_emac_mem->rx_buff_pool_base_pa,
+		veth_emac_mem->rx_buff_pool_base_iova,
 		(sizeof(uint32_t) * VETH_RX_DESC_CNT * 4)
 		);
 	/*using ipa dev node for buff pool*/
@@ -424,10 +424,10 @@ int veth_set_ul_dl_smmu_ipa_params(struct veth_ipa_dev *pdata,
 
 	if (!dl->buff_pool_base_sgt)
 		return -ENOMEM;
-	ret = dma_get_sgtable(&pdata->pdev->dev,
+	ret = dma_get_sgtable(ipa_get_dma_dev(),
 		dl->buff_pool_base_sgt,
 		veth_emac_mem->tx_buff_pool_base_va,
-		veth_emac_mem->tx_buff_pool_base_pa,
+		veth_emac_mem->tx_buff_pool_base_iova,
 		(sizeof(uint32_t) * VETH_TX_DESC_CNT * 4)
 		);
 	if (ret) {
